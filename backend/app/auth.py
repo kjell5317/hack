@@ -1,13 +1,12 @@
-from functools import lru_cache
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
-import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+from supabase_auth.errors import AuthError, AuthRetryableError
 
-from app.config import settings
+from app.supabase_client import Supabase
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -18,46 +17,29 @@ class User(BaseModel):
     role: str | None = None
 
 
-@lru_cache
-def _jwks_client() -> jwt.PyJWKClient:
-    return jwt.PyJWKClient(f"{settings.supabase_url}/auth/v1/.well-known/jwks.json")
-
-
-def decode_token(token: str) -> dict[str, Any]:
-    """Verify a Supabase access token and return its claims.
-
-    Asymmetric tokens (ES256/RS256) are checked against the project's JWKS,
-    legacy HS256 tokens against SUPABASE_JWT_SECRET.
-    """
-    alg = jwt.get_unverified_header(token).get("alg")
-    if alg == "HS256":
-        if not settings.supabase_jwt_secret:
-            raise jwt.InvalidTokenError("HS256 token but SUPABASE_JWT_SECRET is unset")
-        key: Any = settings.supabase_jwt_secret
-    elif alg in ("ES256", "RS256"):
-        if not settings.supabase_url:
-            raise jwt.InvalidTokenError("SUPABASE_URL is unset, cannot fetch JWKS")
-        key = _jwks_client().get_signing_key_from_jwt(token).key
-    else:
-        raise jwt.InvalidTokenError(f"Unsupported algorithm: {alg}")
-    return jwt.decode(token, key, algorithms=[alg], audience="authenticated")
-
-
-def current_user(
+async def current_user(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    supabase: Supabase,
 ) -> User:
-    # Sync on purpose: FastAPI runs it in a threadpool, so the (cached) JWKS
-    # fetch never blocks the event loop.
     if creds is None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Asymmetric tokens are verified locally against the project's (cached)
+    # JWKS; legacy HS256 tokens are checked with the Auth server.
     try:
-        claims = decode_token(creds.credentials)
-    except jwt.PyJWTError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Invalid token: {e}") from e
+        res = await supabase.auth.get_claims(jwt=creds.credentials)
+    except AuthRetryableError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Auth unavailable") from e
+    except AuthError as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Invalid token: {e.message}") from e
+    except ValueError as e:  # supabase-auth raises pydantic errors for malformed headers
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token") from e
+    claims = res["claims"] if res else {}
+    if not claims.get("sub"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token: no subject")
     return User(id=claims["sub"], email=claims.get("email"), role=claims.get("role"))
 
 

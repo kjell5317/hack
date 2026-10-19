@@ -4,12 +4,9 @@ version = "0.1.0"
 description = "Hackathon API"
 requires-python = ">=3.13"
 dependencies = [
-    "asyncpg>=0.32.0",
     "fastapi>=0.149.0",
-    "pgvector>=0.5.1",
     "pydantic-settings>=2.16.0",
-    "pyjwt[crypto]>=2.15.1",
-    "sqlalchemy[asyncio]>=2.1.5",
+    "supabase>=2.33.0",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -28,3 +25,5 @@ select = ["E", "F", "I", "UP", "B", "BLE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Raised inside supabase-py itself, not by our code.
+filterwarnings = ["ignore:The '(timeout|verify)' parameter is deprecated:DeprecationWarning"]

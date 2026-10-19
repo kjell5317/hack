@@ -1,41 +1,35 @@
+"""Token checks that fail before any call to Supabase."""
+
+import base64
+import json
 import time
-import uuid
 
-import jwt
 import pytest
-from fastapi.testclient import TestClient
-
-from app.main import app
-from tests.conftest import make_token
-
-client = TestClient(app)
-USER_ID = uuid.uuid4()
 
 
-def auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def b64(obj: dict) -> str:
+    return base64.urlsafe_b64encode(json.dumps(obj).encode()).rstrip(b"=").decode()
 
 
-def test_me_returns_user_from_token():
-    res = client.get("/api/me", headers=auth(make_token(USER_ID)))
-    assert res.status_code == 200
-    assert res.json()["id"] == str(USER_ID)
+def fake_jwt(header: dict | None = None, **claims) -> str:
+    header = header or {"alg": "ES256", "typ": "JWT", "kid": "k"}
+    return f"{b64(header)}.{b64(claims)}.c2ln"
 
 
-def test_missing_token_is_rejected():
+def test_missing_token_is_rejected(client):
     assert client.get("/api/me").status_code == 401
 
 
 @pytest.mark.parametrize(
     "token",
     [
-        jwt.encode({"sub": str(USER_ID), "aud": "authenticated"}, "wrong" * 8, "HS256"),
-        make_token(USER_ID, aud="anon"),
-        make_token(USER_ID, exp=int(time.time()) - 10),
-        jwt.encode({"sub": str(USER_ID), "aud": "authenticated"}, None, algorithm="none"),
         "not-a-jwt",
+        fake_jwt(sub="u", exp=int(time.time()) - 10),
+        fake_jwt(sub="u"),
+        fake_jwt({"alg": "ES256"}, sub="u", exp=int(time.time()) + 60),
     ],
-    ids=["bad-signature", "wrong-audience", "expired", "alg-none", "garbage"],
+    ids=["garbage", "expired", "no-exp", "bad-header"],
 )
-def test_invalid_tokens_are_rejected(token):
-    assert client.get("/api/me", headers=auth(token)).status_code == 401
+def test_malformed_tokens_are_rejected(client, token):
+    res = client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 401

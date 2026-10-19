@@ -25,7 +25,12 @@ export function AuthForm() {
     const { data, error } =
       mode === "signIn"
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signUp({
+            email,
+            password,
+            // Must be listed under Auth > URL Configuration > Redirect URLs.
+            options: { emailRedirectTo: window.location.origin },
+          })
     setBusy(false)
     if (error) toast.error(error.message)
     else if (mode === "signUp" && !data.session)

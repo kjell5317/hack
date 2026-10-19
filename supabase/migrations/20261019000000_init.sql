@@ -14,9 +14,9 @@ create index notes_user_id_idx on public.notes (user_id);
 create index notes_embedding_idx on public.notes
   using hnsw (embedding extensions.vector_cosine_ops);
 
--- The backend connects as the table owner and bypasses RLS. RLS still matters
--- because the publishable key lets any browser query public tables directly
--- via the Supabase REST API. This policy allows read-only access to own rows.
+-- The backend uses the secret key (service_role) and bypasses RLS. RLS still
+-- matters because the publishable key lets any browser query public tables
+-- directly via the Supabase REST API. This policy allows reading own rows.
 alter table public.notes enable row level security;
 
 create policy "Users can read their own notes"

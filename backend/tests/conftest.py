@@ -1,26 +1,17 @@
-import time
-import uuid
+import os
 
-import jwt
-import pytest
+# Settings are read at import time. Unit tests never reach Supabase; the
+# integration tests (test_supabase.py) need real values in the environment.
+os.environ.setdefault("SUPABASE_URL", "http://127.0.0.1:54321")
+os.environ.setdefault("SUPABASE_SECRET_KEY", "unused-in-unit-tests")
 
-from app.config import settings
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
-TEST_SECRET = "test-secret-with-at-least-32-characters"
-
-
-@pytest.fixture(autouse=True)
-def jwt_secret(monkeypatch):
-    monkeypatch.setattr(settings, "supabase_jwt_secret", TEST_SECRET)
+from app.main import app  # noqa: E402
 
 
-def make_token(user_id: uuid.UUID, **overrides) -> str:
-    claims = {
-        "sub": str(user_id),
-        "aud": "authenticated",
-        "role": "authenticated",
-        "email": "test@example.com",
-        "exp": int(time.time()) + 3600,
-        **overrides,
-    }
-    return jwt.encode(claims, TEST_SECRET, algorithm="HS256")
+@pytest.fixture(scope="module")
+def client():
+    with TestClient(app) as c:
+        yield c

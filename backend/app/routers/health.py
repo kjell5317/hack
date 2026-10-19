@@ -1,19 +1,17 @@
 from fastapi import APIRouter
-from sqlalchemy import text
 
 from app.auth import CurrentUser, User
-from app.db import engine
+from app.supabase_client import Supabase
 
 router = APIRouter(tags=["meta"])
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
+async def health(supabase: Supabase) -> dict[str, str]:
     try:
-        async with engine.connect() as conn:
-            await conn.execute(text("select 1"))
+        await supabase.table("notes").select("id").limit(1).execute()
         database = "ok"
-    except Exception as e:  # noqa: BLE001 - report any DB failure, don't crash
+    except Exception as e:  # noqa: BLE001 - report any failure, don't crash
         database = f"error: {type(e).__name__}"
     return {"status": "ok", "database": database}
 

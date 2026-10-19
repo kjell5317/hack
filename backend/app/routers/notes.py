@@ -1,18 +1,17 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
 from app.auth import CurrentUser
-from app.db import get_session
 from app.embeddings import embed
-from app.models import Note
+from app.supabase_client import Supabase
 
 router = APIRouter(prefix="/notes", tags=["notes"])
-Session = Annotated[AsyncSession, Depends(get_session)]
+
+# The Supabase client uses the secret key, which bypasses RLS: every query
+# below must filter by the current user itself.
 
 
 class NoteIn(BaseModel):
@@ -20,8 +19,6 @@ class NoteIn(BaseModel):
 
 
 class NoteOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     content: str
     created_at: datetime
@@ -32,32 +29,36 @@ class NoteHit(NoteOut):
 
 
 @router.get("")
-async def list_notes(user: CurrentUser, session: Session) -> list[NoteOut]:
-    rows = await session.scalars(
-        select(Note).where(Note.user_id == user.id).order_by(Note.created_at.desc())
+async def list_notes(user: CurrentUser, supabase: Supabase) -> list[NoteOut]:
+    res = await (
+        supabase.table("notes")
+        .select("id, content, created_at")
+        .eq("user_id", str(user.id))
+        .order("created_at", desc=True)
+        .execute()
     )
-    return [NoteOut.model_validate(n) for n in rows]
+    return [NoteOut.model_validate(row) for row in res.data]
 
 
 @router.post("", status_code=201)
-async def create_note(body: NoteIn, user: CurrentUser, session: Session) -> NoteOut:
-    note = Note(user_id=user.id, content=body.content, embedding=await embed(body.content))
-    session.add(note)
-    await session.commit()
-    return NoteOut.model_validate(note)
+async def create_note(body: NoteIn, user: CurrentUser, supabase: Supabase) -> NoteOut:
+    row = {"user_id": str(user.id), "content": body.content, "embedding": await embed(body.content)}
+    res = await supabase.table("notes").insert(row).execute()
+    return NoteOut.model_validate(res.data[0])
 
 
 @router.get("/search")
 async def search_notes(
     user: CurrentUser,
-    session: Session,
+    supabase: Supabase,
     q: Annotated[str, Query(min_length=1)],
     limit: Annotated[int, Query(ge=1, le=50)] = 5,
 ) -> list[NoteHit]:
-    distance = Note.embedding.cosine_distance(await embed(q)).label("distance")
-    rows = await session.execute(
-        select(Note, distance).where(Note.user_id == user.id).order_by(distance).limit(limit)
-    )
-    return [
-        NoteHit(**NoteOut.model_validate(note).model_dump(), score=1 - dist) for note, dist in rows
-    ]
+    # Vector search runs in Postgres; see match_notes in supabase/migrations.
+    params = {
+        "query_embedding": await embed(q),
+        "match_user_id": str(user.id),
+        "match_count": limit,
+    }
+    res = await supabase.rpc("match_notes", params).execute()
+    return [NoteHit(**row, score=row["similarity"]) for row in res.data]
