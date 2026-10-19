@@ -4,8 +4,8 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
+from app.ai.embeddings import embed
 from app.auth import CurrentUser
-from app.embeddings import embed
 from app.supabase_client import Supabase
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -56,7 +56,7 @@ async def search_notes(
 ) -> list[NoteHit]:
     # Vector search runs in Postgres; see match_notes in supabase/migrations.
     params = {
-        "query_embedding": await embed(q),
+        "query_embedding": await embed(q, purpose="query"),
         "match_user_id": str(user.id),
         "match_count": limit,
     }

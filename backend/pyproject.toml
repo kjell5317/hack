@@ -5,6 +5,9 @@ description = "Hackathon API"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.149.0",
+    "google-genai-haystack>=7.0.0",
+    "haystack-ai>=3.4.0",
+    "langfuse-haystack>=8.0.0",
     "pydantic-settings>=2.16.0",
     "supabase>=2.33.0",
     "uvicorn[standard]>=0.54.0",

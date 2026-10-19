@@ -23,9 +23,8 @@ services:
   backend:
     image: ${IMAGE_PREFIX:?}/backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    environment:
-      SUPABASE_URL: ${SUPABASE_URL:?}
-      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:?}
+    # PROD_ENV secret + deploy values (written by the deploy job).
+    env_file: .env
 
   frontend:
     image: ${IMAGE_PREFIX:?}/frontend:${IMAGE_TAG:-latest}

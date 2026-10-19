@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import type { Session } from "@supabase/supabase-js"
 
+import { Ask } from "@/components/ask"
 import { AuthForm } from "@/components/auth-form"
 import { Notes } from "@/components/notes"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +36,7 @@ function BackendStatus() {
 
   return (
     <Badge variant={status === "ok" ? "secondary" : "destructive"}>
-      backend: {status}
+      {status}
     </Badge>
   )
 }
@@ -70,7 +71,10 @@ export function App() {
             SUPABASE_PUBLISHABLE_KEY in .env and restart.
           </p>
         ) : session ? (
-          <Notes />
+          <div className="flex w-full max-w-xl flex-col gap-6">
+            <Notes />
+            <Ask />
+          </div>
         ) : (
           <AuthForm />
         )}

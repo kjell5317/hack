@@ -4,14 +4,14 @@ React + shadcn/ui frontend, FastAPI backend, Supabase (Postgres + pgvector + Aut
 
 ```
 frontend/   Vite + React 19 + Tailwind v4 + shadcn/ui (radix, Nova preset)
-backend/    FastAPI + supabase-py (async client), managed with uv
+backend/    FastAPI + supabase-py + Haystack (OpenAI or Gemini) + Langfuse, managed with uv
 supabase/   config.toml + SQL migrations (the schema lives here)
 deploy/     production compose file + Caddyfile (TLS via Let's Encrypt)
 infra/      Terraform: Hetzner server, firewall, Cloudflare A record
 .github/    CI: lint/test, build images to GHCR, deploy to the demo box
 ```
 
-The example feature: signed-in users save notes. Each note gets an embedding and goes into a `vector(1536)` column, and search ranks notes by cosine similarity. Everything goes through FastAPI. The browser only talks to Supabase to log in.
+The example feature: signed-in users save notes. Each note gets an embedding and goes into a `vector(1536)` column, and search ranks notes by cosine similarity. "Ask your notes" answers questions with an LLM, using the closest notes as context. Everything goes through FastAPI. The browser only talks to Supabase to log in.
 
 ## Why Supabase rather than plain Postgres
 
@@ -36,6 +36,25 @@ For hosted projects, either turn off **Auth → Providers → Email → Confirm 
 
 `make help` lists all shortcuts.
 
+## LLMs (Haystack) and tracing (Langfuse)
+
+Set `LLM_PROVIDER` in `.env` to whichever partner you end up with, plus its key:
+
+| `LLM_PROVIDER` | Key | Chat model (default) | Embeddings |
+|---|---|---|---|
+| `openai` | `OPENAI_API_KEY` | `gpt-5-mini` | `text-embedding-3-small` |
+| `gemini` | `GOOGLE_API_KEY` | `gemini-3.8-flash` | `gemini-embedding-001`, reduced to 1536 dims |
+| `none` (default) | none | none, `/api/ask` returns 503 | keyword hashing, so notes and search work without a key |
+
+`CHAT_MODEL` overrides the chat model. The code is in `backend/app/ai/`:
+- `providers.py` picks the Haystack components for the provider.
+- `pipelines.py` holds the RAG pipeline behind `POST /api/ask`: embed the question → find notes with `match_notes` through Supabase → build the prompt → LLM.
+- `components.py` has the custom Supabase retriever.
+
+Embeddings from different models can't be compared. After switching provider, notes saved earlier no longer match new searches, so delete them and add them again.
+
+**Langfuse:** create a project at [cloud.langfuse.com](https://cloud.langfuse.com) (free tier) and put its keys in `.env`. Every pipeline run is then traced with prompts, replies, tokens and latency, and `/api/ask` returns a link to its trace. The prompts contain users' notes, so that data ends up in Langfuse.
+
 ## Everyday tasks
 
 | Task | How |
@@ -43,7 +62,7 @@ For hosted projects, either turn off **Auth → Providers → Email → Confirm 
 | Change the schema | `make db-new name=add_things`, write SQL in the new file under `supabase/migrations/`, then `make db-push` (hosted) or `supabase migration up` (local). CI applies it to production on deploy. |
 | Add UI components | `cd frontend && npx shadcn@latest add dialog table …` |
 | Add a backend route | New module in `backend/app/routers/`, register it in `app/main.py`. Protect it with a `user: CurrentUser` parameter. |
-| Use a real embedding model | Replace the body of `embed()` in `backend/app/embeddings.py`. If the dimension isn't 1536, change `EMBEDDING_DIM` and the `vector(…)` column together. The placeholder is a hashed bag of words, so the demo works without an API key. |
+| Build an LLM feature | Add a pipeline in `backend/app/ai/pipelines.py`, build it once in `lifespan` (`app/main.py`), and run it with `await pipeline.run_async(...)`. Take generators and embedders from `providers.py` so switching provider keeps working. |
 | Run tests | `make test`. The end-to-end tests run against local Supabase; the commands are at the top of `backend/tests/test_supabase.py`. |
 | Queries PostgREST can't express | Write a SQL function in a migration and call it with `supabase.rpc(...)`, as vector search does with `match_notes`. |
 
@@ -60,7 +79,7 @@ The pipeline on every push to `main`: tests → build `ghcr.io/<owner>/<repo>/{b
    make infra-apply
    ```
    This creates an Ubuntu box with Docker, a firewall (22/80/443) and an A record `<subdomain>.<zone>` pointing at the server's IP. Your `~/.ssh/id_ed25519.pub` gets root access, and Terraform generates a separate key for CI. State is local (`infra/terraform.tfstate`, gitignored), so keep it on one machine.
-2. **Production config.** Create `.env.production` with the hosted Supabase values (same keys as Option A in `.env.example`).
+2. **Production config.** Create `.env.production` from `.env.example`: hosted Supabase values (option A), the LLM provider and key, and Langfuse keys with `LANGFUSE_TRACING_ENVIRONMENT=demo`.
 3. **Wire up GitHub.** Push the repo to GitHub, then run `make gh-setup`. It sets the `DEMO_DOMAIN` variable plus the `DEPLOY_SSH_KEY` and `PROD_ENV` secrets. It then asks you to paste a Supabase access token and the project's database password, which CI uses to run `supabase db push`.
 4. Push to `main`, or run the CI workflow manually. Caddy gets the TLS certificate on first start.
 

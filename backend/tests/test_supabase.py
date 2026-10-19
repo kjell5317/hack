@@ -84,3 +84,30 @@ def test_browser_side_access_is_limited_by_rls(client, user):
         user_client.rpc(
             "match_notes", {"query_embedding": [0] * 1536, "match_user_id": str(uuid.uuid4())}
         ).execute()
+
+
+def test_ask_retrieves_only_own_notes(client, user):
+    # Real Supabase retrieval; keyword-hash embeddings and an echoing fake LLM.
+    from haystack.components.generators.chat import MockChatGenerator
+
+    from app.ai.components import HashTextEmbedder
+    from app.ai.pipelines import build_ask_pipeline
+
+    headers = bearer(user[0])
+    client.post("/api/notes", json={"content": "the spare key is under the mat"}, headers=headers)
+    other_token, _ = signed_in_user()
+    client.post(
+        "/api/notes", json={"content": "the spare key is in the car"}, headers=bearer(other_token)
+    )
+
+    app = client.app
+    llm = MockChatGenerator(response_fn=lambda messages: messages[-1].text)
+    app.state.ask_pipeline = build_ask_pipeline(app.state.supabase, HashTextEmbedder(), llm)
+    try:
+        res = client.post("/api/ask", json={"question": "where is the spare key?"}, headers=headers)
+    finally:
+        app.state.ask_pipeline = None
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert [s["content"] for s in body["sources"]] == ["the spare key is under the mat"]
+    assert "under the mat" in body["answer"] and "in the car" not in body["answer"]

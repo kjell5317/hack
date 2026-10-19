@@ -6,6 +6,8 @@ services:
   backend:
     build: ./backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Everything in .env (LLM and Langfuse keys, ...) reaches the backend.
+    env_file: .env
     environment:
       # The browser and the container may need different URLs for local Supabase.
       SUPABASE_URL: ${SUPABASE_INTERNAL_URL:-${SUPABASE_URL:?set SUPABASE_URL in .env}}

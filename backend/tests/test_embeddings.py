@@ -1,7 +1,8 @@
 import asyncio
 import math
 
-from app.embeddings import EMBEDDING_DIM, embed
+from app.ai.components import EMBEDDING_DIM, hash_embedding
+from app.ai.embeddings import embed
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -16,11 +17,11 @@ def test_embedding_shape_and_norm():
 
 def test_similar_texts_score_higher():
     cat, cat2, soup = (
-        asyncio.run(embed(t))
+        hash_embedding(t)
         for t in ["the cat sat on the mat", "where is the cat", "tomato soup recipe"]
     )
     assert cosine(cat, cat2) > cosine(cat, soup)
 
 
 def test_empty_text_is_not_a_zero_vector():
-    assert any(asyncio.run(embed("!!!")))
+    assert any(hash_embedding("!!!"))
