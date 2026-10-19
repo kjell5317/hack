@@ -1,0 +1,20 @@
+#cloud-config
+# Prepares the box; the app itself is shipped by the CI deploy job.
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+
+write_files:
+  - path: /root/admin_keys
+    permissions: "0600"
+    content: |
+%{ for key in admin_keys ~}
+      ${key}
+%{ endfor ~}
+
+runcmd:
+  - systemctl enable --now docker
+  - mkdir -p /opt/app
+  - cat /root/admin_keys >> /root/.ssh/authorized_keys && rm /root/admin_keys

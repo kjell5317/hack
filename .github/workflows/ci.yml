@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          working-directory: backend
+          enable-cache: true
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+      # Real Supabase Postgres with supabase/migrations applied.
+      - run: supabase db start
+      - name: Lint and test
+        working-directory: backend
+        env:
+          RUN_DB_TESTS: "1"
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          uv sync --locked
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  images:
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        app: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.app }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.app }}
+          target: prod
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # Enabled once the DEMO_DOMAIN repo variable exists (`make gh-setup`).
+  deploy:
+    needs: [images, terraform]
+    if: vars.DEMO_DOMAIN != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: demo
+      url: https://${{ vars.DEMO_DOMAIN }}
+    concurrency: deploy-demo
+    permissions:
+      contents: read
+      packages: read # lets the server pull private images with GITHUB_TOKEN
+    env:
+      DOMAIN: ${{ vars.DEMO_DOMAIN }}
+      # Set DEPLOY_HOST to the server IP if the DNS record is Cloudflare-proxied.
+      SSH_HOST: ${{ vars.DEPLOY_HOST || vars.DEMO_DOMAIN }}
+      PROD_ENV: ${{ secrets.PROD_ENV }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: supabase/setup-cli@v3
+        with:
+          version: latest
+
+      - name: Apply database migrations
+        run: |
+          DATABASE_URL=$(printf '%s\n' "$PROD_ENV" | sed -n 's/^DATABASE_URL=//p')
+          supabase db push --db-url "$DATABASE_URL" --yes
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Wait for server provisioning
+        run: ssh "root@$SSH_HOST" 'cloud-init status --wait >/dev/null; docker compose version'
+
+      - name: Upload compose files and config
+        run: |
+          {
+            printf '%s\n' "$PROD_ENV"
+            echo "DOMAIN=$DOMAIN"
+            echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "IMAGE_TAG=$GITHUB_SHA"
+          } > app.env
+          scp deploy/docker-compose.prod.yml "root@$SSH_HOST:/opt/app/docker-compose.yml"
+          scp deploy/Caddyfile "root@$SSH_HOST:/opt/app/Caddyfile"
+          scp app.env "root@$SSH_HOST:/opt/app/.env"
+          ssh "root@$SSH_HOST" chmod 600 /opt/app/.env
+
+      - name: Pull and restart
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh "root@$SSH_HOST" docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          ssh "root@$SSH_HOST" 'cd /opt/app && docker compose pull && docker compose up -d --remove-orphans; s=$?; docker logout ghcr.io; docker image prune -f; exit $s'
+
+      - name: Smoke test
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS "https://$DOMAIN/api/health" | tee /dev/stderr | grep -q '"database":"ok"'; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

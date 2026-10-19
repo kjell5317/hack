@@ -1,0 +1,5 @@
+cloudflare_zone = "example.com"
+subdomain       = "demo"
+# server_type   = "cx23"
+# location      = "nbg1"
+# ssh_public_key_files = ["~/.ssh/id_ed25519.pub", "./teammate.pub"]

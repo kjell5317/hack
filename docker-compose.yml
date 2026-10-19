@@ -1,0 +1,36 @@
+# Local development: hot reload for both apps.
+# Database + auth come from Supabase (hosted project or `supabase start`), see README.
+name: hack
+
+services:
+  backend:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      # The browser and the container may need different URLs for local Supabase.
+      SUPABASE_URL: ${SUPABASE_INTERNAL_URL:-${SUPABASE_URL:-}}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+    volumes:
+      - ./backend/app:/app/app
+    ports:
+      - "8000:8000"
+    # Lets the container reach `supabase start` on the host (needed on Linux).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+      VITE_SUPABASE_URL: ${SUPABASE_URL:-}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend

@@ -1,0 +1,1 @@
+-- Runs after migrations on `supabase start` / `supabase db reset` (local only).

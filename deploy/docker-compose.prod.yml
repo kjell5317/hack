@@ -1,0 +1,40 @@
+# Runs on the demo server from images built by CI. Copied to /opt/app by the
+# deploy job, together with Caddyfile and a .env assembled from GitHub secrets.
+name: hack
+
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+  backend:
+    image: ${IMAGE_PREFIX:?}/backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+
+  frontend:
+    image: ${IMAGE_PREFIX:?}/frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+
+volumes:
+  caddy_data:
+  caddy_config:
