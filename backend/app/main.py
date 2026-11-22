@@ -3,20 +3,24 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 
-from app.ai.pipelines import build_ask_pipeline
-from app.ai.providers import chat_generator, text_embedder
-from app.ai.tracing import flush_tracing
-from app.routers import ask, health, notes
-from app.supabase_client import create_supabase
+from app.core.ai.providers import chat_generator, chat_model_name
+from app.core.ai.tracing import flush_tracing
+from app.core.supabase import create_supabase
+from app.domains.playground.pipeline import build_chat_pipeline
+from app.domains.playground.router import router as playground_router
+from app.domains.system.router import router as system_router
+
+# One router per domain (app/domains/<name>/router.py). Register new ones here.
+DOMAIN_ROUTERS = [system_router, playground_router]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Long-lived objects go on app.state and are read through dependencies.
     app.state.supabase = await create_supabase()
     llm = chat_generator()
-    app.state.ask_pipeline = (
-        build_ask_pipeline(app.state.supabase, text_embedder("query"), llm) if llm else None
-    )
+    app.state.llm_model = chat_model_name(llm)
+    app.state.chat_pipeline = build_chat_pipeline(llm) if llm else None
     yield
     flush_tracing()
 
@@ -26,7 +30,6 @@ app = FastAPI(
 )
 
 api = APIRouter(prefix="/api")
-api.include_router(health.router)
-api.include_router(notes.router)
-api.include_router(ask.router)
+for router in DOMAIN_ROUTERS:
+    api.include_router(router)
 app.include_router(api)

@@ -1,91 +1,98 @@
 # hack
 
-React + shadcn/ui frontend, FastAPI backend, Supabase (Postgres + pgvector + Auth), deployed to a Hetzner box with Terraform and GitHub Actions.
+**Quick setup:** [Owner: create the repo, add keys, deploy](docs/setup-owner.md) · [Teammate: join and run it](docs/setup-teammate.md)
 
+A starting point for hackathon teams. Sign-in, an LLM wired up for whichever key the hackathon partner hands out, Postgres with vector search, and a production deploy to your own subdomain. Every push to `main` goes live.
+
+- **Frontend**: React 19, Vite, Tailwind v4, shadcn/ui
+- **Backend**: FastAPI, Haystack (Anthropic, OpenAI or any OpenAI-compatible API, Gemini), Langfuse tracing
+- **Data and auth**: Supabase (Postgres, pgvector, Auth); local in Docker, hosted in production
+- **Deploy**: Terraform creates a Hetzner server, a Supabase project, a Cloudflare DNS record and the GitHub secrets; GitHub Actions tests, builds and ships
+- **Tests**: pytest (unit and against a real local Supabase), Playwright in the browser, all in CI
+- **One CLI** for macOS and Windows: `./hack` (`.\hack` on Windows)
+- **AI coding agents**: instructions and task skills for Claude Code and Codex
+
+## How it works
+
+### Local development
+
+`./hack dev` starts Supabase in Docker (Postgres, Auth, Studio at <http://127.0.0.1:54323>). It then starts the backend and frontend with hot reload at <http://localhost:5173>, with API docs at `/api/docs`. Supabase's local keys never go in `.env`; the CLI reads them from the running stack. The header shows whether the backend, the database and the LLM are ready. The **LLM playground** card sends a prompt through the backend and links to its Langfuse trace.
+
+### Keys and the team `.env`
+
+`.env` holds only what people type in. The provider is picked from whichever key is set; `CHAT_MODEL` overrides the model.
+
+| You have | Put it in `.env` |
+| --- | --- |
+| An Anthropic key | `ANTHROPIC_API_KEY` (model `claude-opus-5-5`) |
+| An OpenAI key | `OPENAI_API_KEY` (`gpt-5-mini`) |
+| Another OpenAI-compatible API | `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| A Gemini key | `GOOGLE_API_KEY` (`gemini-3.8-flash`) |
+| Langfuse (optional) | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (+ `LANGFUSE_BASE_URL` for the US region) |
+
+**Sharing.** `./hack env share` encrypts `.env` with [age](https://age-encryption.org) to every repo collaborator's SSH key, which GitHub publishes at `github.com/<user>.keys`, and commits it as `.env.age`. Teammates decrypt it with `./hack env pull`, using the SSH key `./hack setup` put on their GitHub account. No password manager or extra account is needed, and the encrypted file is safe even in a public repo.
+
+### Deploys
+
+`./hack deploy` runs Terraform (`infra/`), which creates:
+
+- the Supabase project;
+- the Hetzner server;
+- `https://<subdomain>.<zone>`;
+- the GitHub secrets, including a copy of `.env` for production.
+
+From then on, every push to `main` runs CI: tests, then images, then database migrations, then deploy over SSH, then a health check. Until the first `./hack deploy`, CI only tests; the image and deploy jobs are skipped. Terraform state stays on the deployer's machine (`infra/terraform.tfstate`, gitignored).
+
+## Everyday commands
+
+| Command | Does |
+| --- | --- |
+| `./hack dev` / `./hack stop` | Run the app with hot reload / stop it and local Supabase |
+| `./hack check` | Lint, backend tests and browser tests, as CI runs them. Run it before you push. |
+| `./hack test` / `./hack e2e --ui` | Backend tests / Playwright with its UI |
+| `./hack env` / `env fill` / `env share` / `env pull` | Show / fill in / share / receive the team `.env` |
+| `./hack db new add_projects` | New SQL migration; `./hack db reset` rebuilds the local database |
+| `./hack format` | Auto-format Python and TypeScript |
+| `./hack skills` | Copy agent skills to `.claude/skills` after editing them |
+| `./hack deploy` / `./hack destroy` | Create or update production / tear it down, including its data |
+| `./hack doctor` | Show tool versions and project state |
+
+## Project layout
+
+Code is organized by feature ("domain"). A feature has the same name in every layer:
+
+```text
+supabase/migrations/            schema, row level security, SQL functions
+backend/app/domains/<feature>/  router.py · schemas.py · repository.py · pipeline.py
+frontend/src/domains/<feature>/ api.ts · components
+backend/app/core/               config, auth, Supabase client, LLM providers, tracing
+frontend/e2e/                   Playwright tests
+infra/  deploy/  .github/       Terraform, production compose + Caddy, CI/CD
 ```
-frontend/   Vite + React 19 + Tailwind v4 + shadcn/ui (radix, Nova preset)
-backend/    FastAPI + supabase-py + Haystack (OpenAI or Gemini) + Langfuse, managed with uv
-supabase/   config.toml + SQL migrations (the schema lives here)
-deploy/     production compose file + Caddyfile (TLS via Let's Encrypt)
-infra/      Terraform: Hetzner server, firewall, Cloudflare A record
-.github/    CI: lint/test, build images to GHCR, deploy to the demo box
-```
 
-The example feature: signed-in users save notes. Each note gets an embedding and goes into a `vector(1536)` column, and search ranks notes by cosine similarity. "Ask your notes" answers questions with an LLM, using the closest notes as context. Everything goes through FastAPI. The browser only talks to Supabase to log in.
+`playground` is the placeholder feature; replace it with your own. The recipe is in [.agents/skills/new-domain](.agents/skills/new-domain/SKILL.md).
 
-## Why Supabase rather than plain Postgres
+## AI coding agents (Claude Code, Codex)
 
-Supabase *is* Postgres, and pgvector is a built-in extension, so choosing it costs you nothing on embeddings. On top of that you get:
+- **[AGENTS.md](AGENTS.md)** has the project's commands, layout and rules. Codex reads it directly; Claude Code reads it through [CLAUDE.md](CLAUDE.md), which only contains `@AGENTS.md`.
+- **Skills** are task guides an agent loads only when a task needs them. Until then, it sees just their one-line description.
+  - They live in [.agents/skills/](.agents/skills/), which Codex reads.
+  - Claude Code reads only `.claude/skills/`, so that folder is a copy made by `./hack skills`. `./hack lint` fails when the copy is stale.
+  - Edit the skills in `.agents/skills/` only.
 
-- **Auth.** Email/password, magic links and OAuth with no code of our own. FastAPI only verifies the user's token with `supabase.auth.get_claims()` (`backend/app/auth.py`).
-- **Studio.** A table editor, SQL editor and logs, for debugging during the hackathon.
-- **A stateless demo server.** The database is hosted, so the Hetzner box can be destroyed and recreated without losing data.
+| Skill | The agent uses it for |
+| --- | --- |
+| `new-domain` | "Add projects that users can create and list": migration with RLS, backend domain, UI, tests |
+| `supabase` | Schema, SQL, row level security, sign-in and OAuth, storage, realtime |
+| `llm` | Prompts, agents with tools, structured output, RAG with pgvector, switching models, Langfuse |
+| `frontend` | UI with shadcn/ui and Tailwind, calling the API, auth state |
+| `testing` | Writing and debugging pytest and Playwright tests, CI failures |
+| `deploy` | Deploys, production config, logs, rollback, failing deploy jobs |
 
-Trade-offs: you depend on the network and a hosted service, and free projects pause after a week without activity. The backend talks to Supabase only through its Python client (REST API + Auth), with no Postgres connection of its own. Leaving Supabase later would mean replacing that data layer and auth.
+To run one explicitly, type `/new-domain` in Claude Code, or `$new-domain` in Codex.
 
-## Run it locally
+## Security
 
-Prereqs: Docker, [uv](https://docs.astral.sh/uv/), Node 24, [Supabase CLI](https://supabase.com/docs/guides/cli).
-
-1. `cp .env.example .env` and choose a database:
-   - **Hosted (fastest for a team):** create a project at supabase.com and fill in the Option A values. Then run `supabase login`, `make db-link` (once) and `make db-push` to create the tables.
-   - **Local/offline:** run `make db-start`, which starts the whole Supabase stack in Docker (several GB of images) and applies migrations. Copy the values from `supabase status` into the Option B block.
-2. `make dev`, then open http://localhost:5173. API docs are at http://localhost:5173/api/docs.
-
-For hosted projects, either turn off **Auth → Providers → Email → Confirm email** or expect a confirmation mail on sign-up. Locally, confirmation is already off.
-
-`make help` lists all shortcuts.
-
-## LLMs (Haystack) and tracing (Langfuse)
-
-Set `LLM_PROVIDER` in `.env` to whichever partner you end up with, plus its key:
-
-| `LLM_PROVIDER` | Key | Chat model (default) | Embeddings |
-|---|---|---|---|
-| `openai` | `OPENAI_API_KEY` | `gpt-5-mini` | `text-embedding-3-small` |
-| `gemini` | `GOOGLE_API_KEY` | `gemini-3.8-flash` | `gemini-embedding-001`, reduced to 1536 dims |
-| `none` (default) | none | none, `/api/ask` returns 503 | keyword hashing, so notes and search work without a key |
-
-`CHAT_MODEL` overrides the chat model. The code is in `backend/app/ai/`:
-- `providers.py` picks the Haystack components for the provider.
-- `pipelines.py` holds the RAG pipeline behind `POST /api/ask`: embed the question → find notes with `match_notes` through Supabase → build the prompt → LLM.
-- `components.py` has the custom Supabase retriever.
-
-Embeddings from different models can't be compared. After switching provider, notes saved earlier no longer match new searches, so delete them and add them again.
-
-**Langfuse:** create a project at [cloud.langfuse.com](https://cloud.langfuse.com) (free tier) and put its keys in `.env`. Every pipeline run is then traced with prompts, replies, tokens and latency, and `/api/ask` returns a link to its trace. The prompts contain users' notes, so that data ends up in Langfuse.
-
-## Everyday tasks
-
-| Task | How |
-|---|---|
-| Change the schema | `make db-new name=add_things`, write SQL in the new file under `supabase/migrations/`, then `make db-push` (hosted) or `supabase migration up` (local). CI applies it to production on deploy. |
-| Add UI components | `cd frontend && npx shadcn@latest add dialog table …` |
-| Add a backend route | New module in `backend/app/routers/`, register it in `app/main.py`. Protect it with a `user: CurrentUser` parameter. |
-| Build an LLM feature | Add a pipeline in `backend/app/ai/pipelines.py`, build it once in `lifespan` (`app/main.py`), and run it with `await pipeline.run_async(...)`. Take generators and embedders from `providers.py` so switching provider keeps working. |
-| Run tests | `make test`. The end-to-end tests run against local Supabase; the commands are at the top of `backend/tests/test_supabase.py`. |
-| Queries PostgREST can't express | Write a SQL function in a migration and call it with `supabase.rpc(...)`, as vector search does with `match_notes`. |
-
-Tables in `public` are reachable from the browser through Supabase's REST API with the publishable key. Enable RLS on every new table, as the init migration does. The backend uses the secret key, which bypasses RLS, so every backend query must filter by the current user itself (see `backend/app/routers/notes.py`).
-
-## Deploy the demo
-
-The pipeline on every push to `main`: tests → build `ghcr.io/<owner>/<repo>/{backend,frontend}` → apply migrations → SSH to the server, `docker compose pull && up` → check `/api/health`. The deploy job is skipped until the setup below is done.
-
-1. **Server and DNS.** Create a Cloudflare API token with *Zone:DNS:Edit* (plus *Zone:Read*) and a Hetzner Cloud API token. Then:
-   ```sh
-   export HCLOUD_TOKEN=... CLOUDFLARE_API_TOKEN=...
-   cp infra/terraform.tfvars.example infra/terraform.tfvars   # set cloudflare_zone + subdomain
-   make infra-apply
-   ```
-   This creates an Ubuntu box with Docker, a firewall (22/80/443) and an A record `<subdomain>.<zone>` pointing at the server's IP. Your `~/.ssh/id_ed25519.pub` gets root access, and Terraform generates a separate key for CI. State is local (`infra/terraform.tfstate`, gitignored), so keep it on one machine.
-2. **Production config.** Create `.env.production` from `.env.example`: hosted Supabase values (option A), the LLM provider and key, and Langfuse keys with `LANGFUSE_TRACING_ENVIRONMENT=demo`.
-3. **Wire up GitHub.** Push the repo to GitHub, then run `make gh-setup`. It sets the `DEMO_DOMAIN` variable plus the `DEPLOY_SSH_KEY` and `PROD_ENV` secrets. It then asks you to paste a Supabase access token and the project's database password, which CI uses to run `supabase db push`.
-4. Push to `main`, or run the CI workflow manually. Caddy gets the TLS certificate on first start.
-
-To change production config, edit `.env.production`, run `make gh-setup`, and re-run the workflow.
-
-Notes:
-- The default server type is `cx23`. Hetzner's cost-optimized types are sometimes sold out; if so, set `server_type = "cpx22"`.
-- Leave `cloudflare_proxied = false` unless you need Cloudflare's proxy. If you turn it on, set the `DEPLOY_HOST` repo variable to the server IP (`terraform -chdir=infra output -raw ipv4`), because SSH doesn't pass through the proxy.
-- Teammates' keys: add their `.pub` files to `ssh_public_key_files`. The list is only read when the server is created, so for a running box add the keys to `/root/.ssh/authorized_keys` by hand.
+- No secrets are committed. `.env`, `terraform.tfvars` and the state file are gitignored, and `.env.age` is encrypted.
+- The backend uses Supabase's secret key and filters every query by the signed-in user. Row level security protects the tables from direct access with the public key.
+- Once deployed, the URL is public and sign-up is open. LLM endpoints need a signed-in user, but every user spends the partner's key, so set a spend limit on it.

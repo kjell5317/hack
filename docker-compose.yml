@@ -1,22 +1,23 @@
-# Local development: hot reload for both apps.
-# Database + auth come from Supabase (hosted project or `supabase start`), see README.
+# Local development with hot reload. Start it with `./hack dev`, which starts
+# local Supabase first and passes its URL and keys in as environment variables.
 name: hack
 
 services:
   backend:
     build: ./backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    # Everything in .env (LLM and Langfuse keys, ...) reaches the backend.
+    # LLM and Langfuse keys etc.
     env_file: .env
     environment:
-      # The browser and the container may need different URLs for local Supabase.
-      SUPABASE_URL: ${SUPABASE_INTERNAL_URL:-${SUPABASE_URL:?set SUPABASE_URL in .env}}
-      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:?set SUPABASE_SECRET_KEY in .env}
+      SUPABASE_URL: ${SUPABASE_INTERNAL_URL:?start the stack with ./hack dev}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:?start the stack with ./hack dev}
+      # Windows: file events don't reach containers, so poll (set by ./hack dev).
+      WATCHFILES_FORCE_POLLING: ${WATCH_POLLING:-}
     volumes:
       - ./backend/app:/app/app
     ports:
       - "8000:8000"
-    # Lets the container reach `supabase start` on the host (needed on Linux).
+    # Lets the container reach Supabase on the host (needed on Linux).
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -26,8 +27,9 @@ services:
       target: dev
     environment:
       API_PROXY_TARGET: http://backend:8000
-      VITE_SUPABASE_URL: ${SUPABASE_URL:-}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      VITE_SUPABASE_URL: ${SUPABASE_URL:?start the stack with ./hack dev}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?start the stack with ./hack dev}
+      WATCH_POLLING: ${WATCH_POLLING:-}
     volumes:
       - ./frontend:/app
       - /app/node_modules

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Hackathon API"
 requires-python = ">=3.13"
 dependencies = [
+    "anthropic-haystack>=8.1.0",
     "fastapi>=0.149.0",
     "google-genai-haystack>=7.0.0",
     "haystack-ai>=3.4.0",

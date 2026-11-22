@@ -1,8 +1,8 @@
 import asyncio
 import math
 
-from app.ai.components import EMBEDDING_DIM, hash_embedding
-from app.ai.embeddings import embed
+from app.core.ai.embeddings import embed
+from app.core.ai.hash_embedder import EMBEDDING_DIM, hash_embedding
 
 
 def cosine(a: list[float], b: list[float]) -> float:

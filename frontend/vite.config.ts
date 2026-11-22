@@ -14,6 +14,10 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    // Windows + Docker: file events don't reach the container (./hack dev sets this).
+    watch: process.env.WATCH_POLLING
+      ? { usePolling: true, interval: 300 }
+      : undefined,
     // Same-origin /api in dev and prod, so no CORS setup is needed.
     proxy: {
       "/api": process.env.API_PROXY_TARGET ?? "http://localhost:8000",

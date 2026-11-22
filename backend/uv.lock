@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -169,6 +169,38 @@ wheels = [
 ]
 
 [[package]]
+name = "anthropic"
+version = "2.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "docstring-parser" },
+    { name = "httpx2" },
+    { name = "jiter" },
+    { name = "opentelemetry-api" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/05/fdf767b3da8fc8e2d78eef15c98a5ead03be2753b4e9cfcda58f0995f0b0/anthropic-2.12.0.tar.gz", hash = "sha256:571e6d250bcd6bbaf5fd5f3c764b8e11af9901ad2e44b025f8e773c6cc7a7173", size = 2025823, upload-time = "2026-11-20T15:57:03.541Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/a6/1cde7a75d1be07582f6b3c2dd12ddba9d1fb278f5b9685f30dbf6b39dc2c/anthropic-2.12.0-py3-none-any.whl", hash = "sha256:8631e3880ee18b0f87ce61d5d08e67804200463cf27c4182024715e232c99ba6", size = 2556840, upload-time = "2026-11-20T15:57:01.546Z" },
+]
+
+[[package]]
+name = "anthropic-haystack"
+version = "8.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anthropic" },
+    { name = "haystack-ai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a2/57/2e3053b3ebe222db368de8938f45050bf8c18bf1e48f2404ec34d020c820/anthropic_haystack-8.1.0.tar.gz", hash = "sha256:8e19903fc65f370baace04c2a75dc2cab2a80403dadbddb1af91a10a09deb184", size = 149715, upload-time = "2026-11-09T12:29:21.371Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/99/871d2c7549d4dbcd1067ea43a9412aaef21d64b636f5e31370e40c0efe14/anthropic_haystack-8.1.0-py3-none-any.whl", hash = "sha256:f6423eddbc5acf7d311c34ba2e0dbaf541160e7bf6ffe21d61763d5e489ae3f1", size = 31815, upload-time = "2026-11-09T12:29:19.989Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.15.1"
 source = { registry = "https://pypi.org/simple" }
@@ -195,6 +227,7 @@ name = "backend"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "anthropic-haystack" },
     { name = "fastapi" },
     { name = "google-genai-haystack" },
     { name = "haystack-ai" },
@@ -213,6 +246,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic-haystack", specifier = ">=8.1.0" },
     { name = "fastapi", specifier = ">=0.149.0" },
     { name = "google-genai-haystack", specifier = ">=7.0.0" },
     { name = "haystack-ai", specifier = ">=3.4.0" },

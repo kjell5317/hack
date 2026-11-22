@@ -10,13 +10,39 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.28"
     }
+    supabase = {
+      source  = "supabase/supabase"
+      version = "~> 1.11"
+    }
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.13"
+    }
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.4"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9"
+    }
   }
 }
 
-# Credentials come from the environment: HCLOUD_TOKEN and CLOUDFLARE_API_TOKEN.
-provider "hcloud" {}
-provider "cloudflare" {}
+# An unset (or empty) token falls back to HCLOUD_TOKEN / CLOUDFLARE_API_TOKEN.
+provider "hcloud" {
+  token = var.hcloud_token == "" ? null : var.hcloud_token
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token == "" ? null : var.cloudflare_api_token
+}
+
+provider "supabase" {
+  access_token = var.supabase_access_token
+}
+
+# Token from GITHUB_TOKEN; if that is unset the provider runs `gh auth token`.
+provider "github" {
+  owner = local.github_owner
+}

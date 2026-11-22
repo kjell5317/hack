@@ -1,8 +1,17 @@
 locals {
   fqdn = "${var.subdomain}.${var.cloudflare_zone}"
+
+  # One key per non-empty line of each .pub file that exists here; missing files
+  # (a teammate without that key, Windows paths) are skipped instead of failing.
+  admin_keys = flatten([
+    for f in var.ssh_public_key_files : [
+      for line in split("\n", replace(file(pathexpand(f)), "\r", "")) : trimspace(line)
+      if trimspace(line) != ""
+    ] if fileexists(pathexpand(f))
+  ])
 }
 
-# Key pair used by the GitHub Actions deploy job (`make gh-setup` uploads it).
+# Key pair used by the GitHub Actions deploy job (uploaded as DEPLOY_SSH_KEY in github.tf).
 resource "tls_private_key" "deploy" {
   algorithm = "ED25519"
 }
@@ -59,7 +68,7 @@ resource "hcloud_server" "demo" {
   firewall_ids = [hcloud_firewall.demo.id]
 
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    admin_keys = [for f in var.ssh_public_key_files : trimspace(file(pathexpand(f)))]
+    admin_keys = local.admin_keys
   })
 
   public_net {

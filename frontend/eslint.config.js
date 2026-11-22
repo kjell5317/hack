@@ -6,20 +6,26 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'playwright-report', 'test-results']),
   {
     files: ['**/*.{ts,tsx}'],
-    extends: [
-      js.configs.recommended,
-      tseslint.configs.recommended,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-    ],
+    extends: [js.configs.recommended, tseslint.configs.recommended],
+  },
+  {
+    // React rules only for the app: they misread Playwright's fixture `use()` as a hook.
+    files: ['src/**/*.{ts,tsx}'],
+    extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     languageOptions: {
       globals: globals.browser,
     },
     rules: {
       'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['e2e/**/*.ts', '*.config.ts'],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 ])

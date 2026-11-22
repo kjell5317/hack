@@ -9,6 +9,9 @@ export class ApiError extends Error {
   }
 }
 
+// Calls the FastAPI backend at /api (same origin: Vite proxies it in dev, Caddy
+// in prod) with the user's Supabase access token. Throws ApiError with FastAPI's
+// `detail` message on non-2xx. Domain-specific calls live in src/domains/*/api.ts.
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   const session = (await supabase?.auth.getSession())?.data.session
@@ -23,11 +26,4 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, body?.detail ?? res.statusText)
   }
   return res.status === 204 ? (undefined as T) : res.json()
-}
-
-export type Note = {
-  id: number
-  content: string
-  created_at: string
-  score?: number
 }

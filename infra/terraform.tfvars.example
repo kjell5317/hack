@@ -1,5 +1,43 @@
+# Everything the first `terraform apply` needs. Copy to infra/terraform.tfvars
+# and fill in. terraform.tfvars and the *.tfstate files are gitignored and must
+# stay that way: both end up holding these tokens plus generated secrets.
+#
+# GitHub needs no token here: Terraform uses GITHUB_TOKEN, or `gh auth token`
+# if that is unset, so being logged in with `gh auth login` is enough.
+
+# Hetzner Cloud API token: Hetzner Console > your project > Security >
+# API tokens > Generate API token, permission "Read & Write".
+# Leave empty to use the HCLOUD_TOKEN environment variable instead.
+hcloud_token = ""
+
+# Cloudflare API token: dash.cloudflare.com > My Profile > API Tokens >
+# Create Token > Custom token with permissions Zone / DNS / Edit and
+# Zone / Zone / Read, zone resources limited to the zone below.
+# Leave empty to use the CLOUDFLARE_API_TOKEN environment variable instead.
+cloudflare_api_token = ""
+
+# Supabase personal access token: supabase.com/dashboard/account/tokens
+# (Generate new token). It can manage every org you belong to, and it is
+# also stored as the SUPABASE_ACCESS_TOKEN GitHub secret so CI can run migrations.
+supabase_access_token = ""
+
+# Supabase organization slug: the <slug> in supabase.com/dashboard/org/<slug>
+# (Organization settings also shows it). A new project is created in it.
+supabase_organization_id = ""
+
+# Cloudflare zone you control, and the record to create in it:
+# the app is served at https://<subdomain>.<cloudflare_zone>.
 cloudflare_zone = "example.com"
 subdomain       = "demo"
-# server_type   = "cx23"
-# location      = "nbg1"
-# ssh_public_key_files = ["~/.ssh/id_ed25519.pub", "./teammate.pub"]
+
+# GitHub repository that receives the Actions secrets and variables, "owner/name".
+github_repository = "your-user/hack"
+
+# Optional overrides (defaults shown).
+# name                    = "hack"         # Hetzner name prefix and Supabase project name
+# supabase_region         = "eu-central-1"
+# auth_email_confirmation = false          # true needs custom SMTP in Supabase
+# server_type             = "cx23"         # cpx22 if cx23 is sold out
+# location                = "nbg1"
+# ssh_public_key_files    = ["~/.ssh/id_ed25519.pub", "./teammate.pub"] # missing files are skipped
+# env_file                = "../.env"      # source of the PROD_ENV secret (SUPABASE_* keys are replaced)

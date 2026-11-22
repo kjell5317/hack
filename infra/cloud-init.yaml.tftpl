@@ -5,6 +5,7 @@ package_upgrade: true
 packages:
   - docker.io
   - docker-compose-v2
+%{ if length(admin_keys) > 0 ~}
 
 write_files:
   - path: /root/admin_keys
@@ -13,8 +14,11 @@ write_files:
 %{ for key in admin_keys ~}
       ${key}
 %{ endfor ~}
+%{ endif ~}
 
 runcmd:
   - systemctl enable --now docker
   - mkdir -p /opt/app
+%{ if length(admin_keys) > 0 ~}
   - cat /root/admin_keys >> /root/.ssh/authorized_keys && rm /root/admin_keys
+%{ endif ~}

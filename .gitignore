@@ -1,5 +1,8 @@
+# Secrets. .env.age is the encrypted team copy (./hack env share) and is meant to be committed.
 .env
-.env.production
+.env.*
+!.env.example
+!.env.age
 .DS_Store
 
 # Python
@@ -16,4 +19,7 @@ dist/
 infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.*
-infra/terraform.tfvars
+infra/*.tfvars
+!infra/*.tfvars.example
+infra/*.tfplan
+infra/crash.log

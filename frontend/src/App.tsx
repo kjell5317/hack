@@ -1,46 +1,13 @@
-import { useEffect, useState } from "react"
-import type { Session } from "@supabase/supabase-js"
-
-import { Ask } from "@/components/ask"
-import { AuthForm } from "@/components/auth-form"
-import { Notes } from "@/components/notes"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/sonner"
-import { api } from "@/lib/api"
+import { AuthForm } from "@/domains/auth/auth-form"
+import { useSession } from "@/domains/auth/use-session"
+import { PlaygroundCard } from "@/domains/playground/playground-card"
+import { BackendStatus } from "@/domains/system/backend-status"
 import { supabase, supabaseConfigured } from "@/lib/supabase"
 
-function useSession() {
-  const [session, setSession] = useState<Session | null>(null)
-
-  useEffect(() => {
-    if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data } = supabase.auth.onAuthStateChange((_event, s) =>
-      setSession(s)
-    )
-    return () => data.subscription.unsubscribe()
-  }, [])
-
-  return session
-}
-
-function BackendStatus() {
-  const [status, setStatus] = useState("checking")
-
-  useEffect(() => {
-    api<{ status: string; database: string }>("/health")
-      .then((h) => setStatus(h.database === "ok" ? "ok" : "db error"))
-      .catch(() => setStatus("down"))
-  }, [])
-
-  return (
-    <Badge variant={status === "ok" ? "secondary" : "destructive"}>
-      {status}
-    </Badge>
-  )
-}
-
+// App shell: header, auth gate, and the signed-in page. Domain UI lives in
+// src/domains/<name>/; compose it here.
 export function App() {
   const session = useSession()
 
@@ -67,13 +34,12 @@ export function App() {
       <main className="flex flex-1 items-start justify-center p-6">
         {!supabaseConfigured ? (
           <p className="max-w-md text-sm text-muted-foreground">
-            Supabase is not configured. Set SUPABASE_URL and
-            SUPABASE_PUBLISHABLE_KEY in .env and restart.
+            Supabase is not configured. Start the app with ./hack dev, which
+            passes in the local Supabase URL and key.
           </p>
         ) : session ? (
           <div className="flex w-full max-w-xl flex-col gap-6">
-            <Notes />
-            <Ask />
+            <PlaygroundCard />
           </div>
         ) : (
           <AuthForm />
