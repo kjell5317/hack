@@ -48,6 +48,11 @@ IS_LINUX = sys.platform.startswith("linux")
 
 if IS_WIN:
     os.system("")  # turns on ANSI colours in the Windows console
+# Redirected output on Windows (pipes, CI logs) defaults to the ANSI code page (cp1252),
+# which can't encode ✓/✗ and crashes print(). Write UTF-8 everywhere instead.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 _TTY = sys.stdout.isatty()
 
 
