@@ -1,0 +1,73 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: uv
+    directory: "/backend"
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directories:
+      - "/backend"
+      - "/frontend"
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: docker-compose
+    directories:
+      - "/"
+      - "/deploy"
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: terraform
+    directory: "/infra"
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
