@@ -5,20 +5,20 @@ description = "Hackathon API"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic-haystack>=8.1.0",
-    "fastapi>=0.149.0",
-    "google-genai-haystack>=7.0.0",
-    "haystack-ai>=3.4.0",
+    "fastapi>=0.165.0",
+    "google-genai-haystack>=7.2.2",
+    "haystack-ai>=3.5.0",
     "langfuse-haystack>=8.0.0",
-    "pydantic-settings>=2.16.0",
-    "supabase>=2.33.0",
+    "pydantic-settings>=2.16.3",
+    "supabase>=2.34.1",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.14.0",
-    "pytest>=9.1.1",
-    "ruff>=0.17.1",
+    "httpx2>=2.16.2",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
 ]
 
 [tool.ruff]
