@@ -3,6 +3,12 @@ rem Project command line for Windows: .\hack help   (macOS/Linux: ./hack)
 rem Makes sure uv exists, then runs scripts\hack.py with a uv-managed Python.
 setlocal
 
+rem Started from PowerShell 7 (e.g. GitHub Actions, Windows Terminal), PSModulePath
+rem lists PS7's modules first and Windows PowerShell can't load them (the uv and
+rem scoop installers fail on Get-ExecutionPolicy). Unset, powershell.exe rebuilds
+rem its default. setlocal keeps this to this script and scripts\hack.py.
+set "PSModulePath="
+
 set "UV=uv"
 where uv >nul 2>nul && goto run
 set "UV=%USERPROFILE%\.local\bin\uv.exe"
